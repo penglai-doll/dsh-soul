@@ -3,6 +3,10 @@
 [![GitHub topics: dsh-plugin](https://img.shields.io/badge/topic-dsh--plugin-7c3aed)](https://github.com/topics/dsh-plugin)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
+> Bilingual 中英双语：English first, 中文译文在后。
+
+## English
+
 File-backed **living soul** for DeepSeek Harness: the OpenClaw / Hermes
 `SOUL.md` effect, split into the two halves those systems actually have.
 
@@ -163,3 +167,121 @@ files you own and keep the loaded size bounded. The `/soul` routes are served
 on the same host/port as the Web UI with no additional auth and mutate only
 the single configured file — the same boundary as the shipped settings pages,
 so keep the deployment on loopback hosts.
+
+---
+
+## 中文
+
+DeepSeek Harness 的基于文件的 **活体灵魂（living soul）**：OpenClaw / Hermes 的 `SOUL.md` 效果，拆成这两个系统实际拥有的两半。
+
+1. **持久人设。** 一个可信的 `SOUL.md` 风格 markdown 文件被注册为一个有序 system-prompt section。该 section 在每次模型请求时组装、永不被压缩掉，并在每个会话开始时重新读取——改文件后下一个会话即生效，无需重启进程。
+2. **由 agent 维护的记忆。** 四个工具让 agent 跨会话演化自己的灵魂，类似 OpenClaw 的 soul maintenance：
+
+| 工具 | 用途 |
+|---|---|
+| `soul_view` | 读取当前 SOUL.md 内容（附字节占用）。 |
+| `soul_remember` | 追加一条带日期的持久事实/偏好/记忆行，可选归档到某个 `## ` 小节下。 |
+| `soul_edit` | 把 `oldText` 的一次字面出现替换为 `newText`。 |
+| `soul_rewrite` | 整体重写文件——创建、精简、重构。 |
+
+一个 `tool:soul` system-prompt section 告诉 agent 何时用哪个工具。
+
+3. **管理 UI。** 当部署挂载了 `webServer`（Web profile）时，插件配置区（设置 → 插件 → 插件配置）会出现一张可折叠/展开的 **SOUL.md** 卡片，与随附的 bash / agent-loop / web-search 卡片并列。折叠横条显示灵魂的字节状态与"未保存"标记；展开后是一个 textarea 编辑器，带保存 / 撤销 / 重载，走与 Web UI 同源同端口的同源 JSON API。
+
+## Web UI 与 API
+
+卡片位于插件配置区（`settings.plugin.item`，id `soul`，order 30）。Host 半边提供：
+
+| 路由 | 用途 |
+|---|---|
+| `GET /soul` | 当前灵魂：`{ ok, exists, text, bytes, maxBytes, file }`。文件不存在时报告 `exists: false`。 |
+| `POST /soul/save` | 用 `{ content }` 整体替换灵魂。强制 `maxBytes` 并拒绝空白内容；不存在时创建文件。 |
+
+草稿超过 `maxBytes` 时编辑器告警、API 拒绝写入，因此字节预算对每一条会变更灵魂的路径（工具与 UI）都成立。保存不会热替换运行中会话的 section——当前会话保留它启动时的灵魂，下一个会话启动才取新内容。
+
+## 它不做什么
+
+- 绝不**发现**任意项目目录里的 `SOUL.md` 文件：克隆下来的仓库绝不能更改 agent 的人设。按设计，把配置路径视为可信的 prompt injection。
+- 绝不写入单个配置文件之外的任何路径，且每次写入都遵守 `maxBytes` 预算。超限写入被拒绝并提示精简。
+- 缺失、非文件、超限、不可读的输入绝不会破坏 profile：人设 section 直接缺席（或瞬态读错误时保留旧灵魂），工具以清晰消息失败。
+
+## 安装
+
+```sh
+dsh plugin --profile web add <this-directory>
+```
+
+然后向 profile 的 `cordis.patch.yml` 加一行：
+
+```yaml
+- insert:
+    - id: dsh-soul
+      name: 'dsh-soul'
+      config:
+        maxBytes: 65536
+```
+
+重启 `dsh web`。`maxBytes` 必填，因为该文本会在每次模型请求的系统提示里重复。
+
+## 配置
+
+| 字段 | 默认 | 含义 |
+|---|---|---|
+| `maxBytes` | 必填 | SOUL 文件的最大 UTF-8 字节数。超过此限的读写被拒绝。 |
+| `file` | `$DSH_HOME/SOUL.md` | 要加载与维护的文件。`~`、`~/`、`~\` 前缀会展开；相对路径从 `process.cwd()` 解析。 |
+| `dshHome` | `$DSH_HOME`，否则 `~/.dsh` | 覆盖默认 `file` 路径使用的 harness home。 |
+| `sectionName` | `soul:persona` | system-prompt section 名。仅在行挂载于 agent preset scope（会遮蔽部署人设）时用 `deployment:persona`。 |
+| `order` | `1` | system-prompt section 顺序。`-100` 是 harness 身份，`0` 是部署人设，工具指引约从 `100` 开始。 |
+| `complete` | `false` | 为 `true` 时，SOUL 文本在组装后成为完整系统提示。仅用于刻意极简的预设。 |
+| `tools` | `true` | 设 `false` 则只保留静态人设注入（v0.1 行为），不带维护工具。 |
+
+### 全局人设（默认）
+
+```yaml
+- id: dsh-soul
+  name: 'dsh-soul'
+  config:
+    maxBytes: 65536
+```
+
+### 显式文件
+
+```yaml
+- id: dsh-soul
+  name: 'dsh-soul'
+  config:
+    maxBytes: 65536
+    file: D:\personas\neptune\SOUL.md
+```
+
+### 逐预设遮蔽
+
+若 `dsh-soul` 从某个 `agent.cordis.yml` 预设 scope 挂载，它可以遮蔽该预设的部署人设：
+
+```yaml
+- id: soul
+  name: 'dsh-soul'
+  config:
+    maxBytes: 65536
+    sectionName: deployment:persona
+    order: 0
+```
+
+在 host profile 补丁里，`sectionName: deployment:persona` 会与 system-prompt 注册表自身的全局人设注册冲突并响亮失败；那里请保留 `soul:persona`。
+
+## 语义
+
+- **刷新。** 文件在挂载时读一次、每次 `agent/session-start` 再读一次；仅当文本变化时才替换已注册 section。会话内灵魂保持稳定，与 `@deepseek-ai/dsh-persona` 的稳定人设模型一致。删除文件会在下一个会话开始时移除 section。
+- **写入。** 维护工具走 host `fs` provider：向 `fs/write-intent` 槽请求版本 guard（从而检测外部编辑后的过期写入）、在调用会话的沙箱策略下原子写入、并像内置文件工具一样记录 `fs/observed`。在受限 profile 下，把 `file` 指向你的工作区内，或用允许该路径的会话策略。未挂载 `fs` provider 时人设 section 仍可用（Node 回退），但工具被跳过。
+- **插值。** 原文成为 system-prompt section，因此 system-prompt 注册表仍会把完整的 `{{...}}` 组对注册变量做插值。除非你确实要引用该变量，否则避免在 `SOUL.md` 里写 `{{model}}` 形状的文本。
+- **增长纪律。** `soul_remember` 让条目保持单行带日期；文件逼近 `maxBytes` 时用 `soul_rewrite` 精简重写（或调大 `maxBytes` 后重载）。命名了 `## ` 小节时记忆条目落到该小节下，否则追加到文件末尾。
+
+## 测试
+
+```sh
+node --test
+```
+
+## 信任
+
+`SOUL.md` 按设计就是用户撰写的 prompt injection。只把 `file` 指向你拥有的文件，并保持加载体积有界。`/soul` 路由与 Web UI 同源同端口、无额外鉴权，且只变更那一个配置文件——与随附设置页的边界相同，因此请把部署保持在 loopback 主机上。
